@@ -64,3 +64,6 @@ dialog.course-dialog.visible::backdrop{opacity:1}
   .electives-section{padding-top:8px}
   .legend{gap:9px;margin-top:5px}
 }
+.card-meta{height:auto;flex:0 0 auto;padding-right:20px}
+.history{display:block;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+@media print{.card-meta{height:auto;min-height:3mm;padding-right:5mm}}

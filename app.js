@@ -32,12 +32,13 @@ function firstOffering(course){const text=historyOf(course);if(!text)return '';r
 // One shared component ensures matching dimensions and placement across categories.
 function renderCourse(course){
   const category=categoryClass(categoryOf(course));
-  const code=codeOf(course),history=firstOffering(course);
+  const code=codeOf(course),history=firstOffering(course),status=field(course,'Status').trim();
   const card=document.createElement('article');
   card.className=`course-card ${category}`;card.tabIndex=0;card.setAttribute('role','button');
   card.setAttribute('aria-label',`${titleOf(course)}. Open course details.`);
-  const teachingHistory=history&&category==='core'?`<div class="card-meta"><span class="history">Last taught: ${esc(history)}</span></div>`:'';
-  card.innerHTML=`<div class="card-code-slot">${code?`<span class="code-pill">${esc(code)}</span>`:''}</div><h3>${esc(titleOf(course))}</h3>${teachingHistory}<span class="card-affordance" aria-hidden="true"></span>`;
+  const metadata=category==='core'?(history?`Last taught: ${esc(history)}`:''):((category==='topics'||category==='electives')&&status?`Status: ${esc(status)}`:'');
+  const metadataRow=metadata?`<div class="card-meta"><span class="history">${metadata}</span></div>`:'';
+  card.innerHTML=`<div class="card-code-slot">${code?`<span class="code-pill">${esc(code)}</span>`:''}</div><h3>${esc(titleOf(course))}</h3>${metadataRow}<span class="card-affordance" aria-hidden="true"></span>`;
   card.addEventListener('click',()=>showDetail(course,category,card));
   card.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();showDetail(course,category,card);}});
   return card;
