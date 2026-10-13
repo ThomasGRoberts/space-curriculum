@@ -51,3 +51,16 @@ dialog.course-dialog.visible::backdrop{opacity:1}
   .legend span{font-size:6.8pt}
   .legend-swatch{width:3mm;height:1.8mm}
 }
+@media screen and (min-width:621px){
+  main{width:min(840px,calc(100% - 48px));padding:38px 0 26px}
+  .topbar{right:max(calc((100vw - 840px)/2),24px);top:16px}
+  .intro{margin-bottom:14px}
+  h1{font-size:27px}
+  .intro-divider{margin:10px 0 7px}
+  .curriculum{gap:11px}
+  .section-heading{margin-bottom:6px}
+  .course-grid{gap:8px}
+  .course-card h3{font-size:13.5px}
+  .electives-section{padding-top:8px}
+  .legend{gap:9px;margin-top:5px}
+}
