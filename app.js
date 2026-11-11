@@ -56,8 +56,10 @@ function renderTopLanguage(csv){
   }
   for(const course of state.courses){
     const category=categoryClass(categoryOf(course));
-    if(['core','topics','electives'].includes(category))addTerm(categoryOf(course),`inline-${category}`);
+    if(category==='core'||category==='topics')addTerm(categoryOf(course),`inline-${category}`);
   }
+  const otherElectivesLabel=$('#curriculum .legend .electives-swatch')?.parentElement?.textContent;
+  if(otherElectivesLabel)addTerm(otherElectivesLabel,'inline-electives');
   const labels=[...terms.keys()].sort((a,b)=>b.length-a.length);
   if(!labels.length){note.textContent=values.description;return;}
   const escapeRegex=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
