@@ -1,8 +1,11 @@
 const state = { courses: [], sourceCard: null };
 const $ = selector => document.querySelector(selector);
-const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4WwGJ6TIuTt0nlvh3Xp2x_0rcJdLx7JInJ_5cy1n9H2sZIr8EGCohbqLQmbasSRjCLe51m6vbXnAa/pub?gid=0&single=true&output=csv';
+const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4WwGJ6TIuTt0nlvh3Xp2x_0rcJdLx7JInJ_5cy1n9H2sZIr8EGCohbqLQmbasSRjCLe51m6vbXnAa/pub';
+const TOP_LANGUAGE_CSV_URL = `${SHEET_URL}?gid=1528805080&single=true&output=csv`;
+const COURSES_CSV_URL = `${SHEET_URL}?gid=0&single=true&output=csv`;
 
-function parseCSV(text) {
+function parseCSVRows(text) {
+  text=text.replace(/^\uFEFF/,'');
   const rows=[]; let row=[], cell='', quoted=false;
   for(let i=0;i<text.length;i++){
     const c=text[i];
@@ -13,6 +16,10 @@ function parseCSV(text) {
     else cell+=c;
   }
   if(cell.length||row.length){row.push(cell);if(row.some(v=>v.trim()))rows.push(row);}
+  return rows;
+}
+function parseCSV(text) {
+  const rows=parseCSVRows(text);
   if(!rows.length)return [];
   const headers=rows.shift().map((h,i)=>h.trim()||`Column ${i+1}`);
   return rows.map(values=>Object.fromEntries(headers.map((h,i)=>[h,(values[i]??'').trim()])));
@@ -28,6 +35,42 @@ function codeOf(course){return field(course,'Course Codes','Course Code','Course
 function creditsOf(course){return field(course,'Credits','Credit','Credit Hours');}
 function historyOf(course){return patterned(course,[/recentofferings/,/historicalofferings/,/offerings/,/teachinghistory/,/taught/]);}
 function firstOffering(course){const text=historyOf(course);if(!text)return '';return text.split(/,\s*(?=(?:Fall|Spring|Summer)\s+\d{4})|[;\n]+/i).map(x=>x.trim()).filter(Boolean)[0]||'';}
+
+function renderTopLanguage(csv){
+  const values=Object.fromEntries(parseCSVRows(csv).map(([key,value])=>[norm(key),value?.trim()||'']));
+  if(!values.title||!values.description)throw Error('The Top Language tab is missing its title or description.');
+  $('.eyebrow').textContent=values.eyebrow||'';
+  $('.intro h1').textContent=values.title;
+  $('.dek').textContent=values.subtitle||'';
+  document.title=`Curriculum Proposal: ${values.title} | Georgia Tech`;
+  const note=$('.orienting-note');note.replaceChildren();
+  const terms=new Map();
+  const addTerm=(label,style)=>{
+    label=label.trim();
+    if(!label)return;
+    terms.set(label.toLowerCase(),style);
+    if(/(Courses|Topics|Electives)$/i.test(label))terms.set(label.slice(0,-1).toLowerCase(),style);
+  };
+  for(const heading of document.querySelectorAll('#curriculum .section-heading')){
+    addTerm(heading.querySelector('h2').textContent,heading.classList.contains('core-heading')?'inline-core':'inline-electives');
+  }
+  for(const course of state.courses){
+    const category=categoryClass(categoryOf(course));
+    if(['core','topics','electives'].includes(category))addTerm(categoryOf(course),`inline-${category}`);
+  }
+  const labels=[...terms.keys()].sort((a,b)=>b.length-a.length);
+  if(!labels.length){note.textContent=values.description;return;}
+  const escapeRegex=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const pattern=new RegExp(`\\b(?:${labels.map(escapeRegex).join('|')})\\b`,'gi');
+  let cursor=0,match;
+  while((match=pattern.exec(values.description))){
+    note.append(document.createTextNode(values.description.slice(cursor,match.index)));
+    const strong=document.createElement('strong');
+    strong.className=terms.get(match[0].toLowerCase());strong.textContent=match[0];note.append(strong);
+    cursor=pattern.lastIndex;
+  }
+  note.append(document.createTextNode(values.description.slice(cursor)));
+}
 
 // One shared component ensures matching dimensions and placement across categories.
 function renderCourse(course){
@@ -62,29 +105,37 @@ function showDetail(course,category,sourceCard){
   dialog.querySelector('.close').focus();
 }
 function closeDetail(){const dialog=$('#course-dialog');if(!dialog.open||dialog.classList.contains('closing'))return;dialog.classList.remove('visible');dialog.classList.add('closing');const delay=matchMedia('(prefers-reduced-motion: reduce)').matches?0:240;window.setTimeout(()=>{if(dialog.open)dialog.close();dialog.classList.remove('closing');},delay);}
-function appendGrid(section,records){const grid=section.querySelector('.course-grid');records.forEach(course=>grid.append(renderCourse(course)));}
 function renderCourses(){
   const root=$('#curriculum');root.replaceChildren();
-  const core=state.courses.filter(course=>categoryClass(categoryOf(course))==='core');
-  const topics=state.courses.filter(course=>categoryClass(categoryOf(course))==='topics');
-  const electives=state.courses.filter(course=>categoryClass(categoryOf(course))==='electives');
-  if(core.length){const section=document.createElement('section');section.className='core-section';section.innerHTML='<div class="section-heading core-heading"><h2>Core Courses</h2></div><div class="course-grid"></div>';appendGrid(section,core);root.append(section);}
-  if(topics.length||electives.length){
-    const section=document.createElement('section');section.className='electives-section';section.innerHTML='<div class="section-heading electives-heading"><h2>Electives</h2></div><div class="course-grid"></div><div class="legend"><span><i class="legend-swatch topics-swatch"></i>Space-focused Special Topics</span><span><i class="legend-swatch electives-swatch"></i>Other Electives</span></div>';
-    [...topics,...electives].forEach(course=>section.querySelector('.course-grid').append(renderCourse(course)));
-    root.append(section);
+  const coreCount=state.courses.filter(course=>categoryClass(categoryOf(course))==='core').length;
+  let section=null, currentGroup='';
+  for(const course of state.courses){
+    const category=categoryClass(categoryOf(course));
+    if(!['core','topics','electives'].includes(category))continue;
+    const group=category==='core'?'core':'electives';
+    if(group!==currentGroup){
+      section=document.createElement('section');
+      section.className=`${group}-section`;
+      section.innerHTML=group==='core'
+        ?`<div class="section-heading core-heading"><h2>${coreCount===1?'Core Course':'Core Courses'}</h2></div><div class="course-grid"></div>`
+        :'<div class="section-heading electives-heading"><h2>Electives</h2></div><div class="course-grid"></div><div class="legend"><span><i class="legend-swatch topics-swatch"></i>Space-focused Special Topics</span><span><i class="legend-swatch electives-swatch"></i>Other Electives</span></div>';
+      root.append(section);currentGroup=group;
+    }
+    section.querySelector('.course-grid').append(renderCourse(course));
   }
-  if(!core.length&&!topics.length&&!electives.length)root.innerHTML='<div class="empty-state">No course records were returned by the Courses tab.</div>';
+  if(!root.children.length)root.innerHTML='<div class="empty-state">No course records were returned by the Courses tab.</div>';
 }
 async function load(){
   const error=$('#error');error.hidden=true;
   try{
-    const response=await fetch(SHEET_CSV_URL,{cache:'no-store'});
-    if(!response.ok)throw Error(`Google Sheets request failed (${response.status}).`);
-    state.courses=parseCSV(await response.text());
+    const [topResponse,coursesResponse]=await Promise.all([fetch(TOP_LANGUAGE_CSV_URL,{cache:'no-store'}),fetch(COURSES_CSV_URL,{cache:'no-store'})]);
+    if(!topResponse.ok||!coursesResponse.ok)throw Error(`Google Sheets request failed (${!topResponse.ok?topResponse.status:coursesResponse.status}).`);
+    const topCsv=await topResponse.text();
+    state.courses=parseCSV(await coursesResponse.text());
     if(!state.courses.length)throw Error('The Courses tab returned no course rows.');
     renderCourses();
-  }catch(err){error.hidden=false;error.textContent=err.message;$('#curriculum').innerHTML='<div class="empty-state">Course records are unavailable. Reload the page to try again.</div>';}
+    renderTopLanguage(topCsv);
+  }catch(err){error.hidden=false;error.textContent=err.message;$('#curriculum').innerHTML='<div class="empty-state">Proposal data is unavailable. Reload the page to try again.</div>';}
 }
 $('#course-dialog .close').addEventListener('click',closeDetail);
 $('#course-dialog').addEventListener('click',event=>{if(event.target.id==='course-dialog')closeDetail();});
