@@ -50,7 +50,6 @@ function renderTopLanguage(csv){
     label=label.trim();
     if(!label)return;
     terms.set(label.toLowerCase(),style);
-    if(/(Courses|Topics|Electives)$/i.test(label))terms.set(label.slice(0,-1).toLowerCase(),style);
   };
   for(const heading of document.querySelectorAll('#curriculum .section-heading')){
     addTerm(heading.querySelector('h2').textContent,heading.classList.contains('core-heading')?'inline-core':'inline-electives');
