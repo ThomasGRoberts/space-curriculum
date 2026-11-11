@@ -30,6 +30,7 @@ function field(record,...candidates){for(const candidate of candidates){const ke
 function patterned(record,patterns){for(const pattern of patterns){const key=Object.keys(record||{}).find(k=>pattern.test(norm(k)));if(key&&record[key])return record[key];}return '';}
 function categoryOf(course){return field(course,'Category')||'Uncategorized';}
 function categoryClass(category){const c=norm(category);return /core/.test(c)?'core':/specialtopic/.test(c)?'topics':/elective/.test(c)?'electives':'other';}
+function frequencyOf(course){return field(course,'Frequency','Frequency of Offering').trim();}
 function titleOf(course){return field(course,'Course Title','Title','Name')||'Untitled course';}
 function codeOf(course){return field(course,'Course Codes','Course Code','Course Number','Codes','Code','Number')||patterned(course,[/^(course)?codes?$/,/^(course)?numbers?$/]);}
 function creditsOf(course){return field(course,'Credits','Credit','Credit Hours');}
@@ -107,21 +108,35 @@ function showDetail(course,category,sourceCard){
 function closeDetail(){const dialog=$('#course-dialog');if(!dialog.open||dialog.classList.contains('closing'))return;dialog.classList.remove('visible');dialog.classList.add('closing');const delay=matchMedia('(prefers-reduced-motion: reduce)').matches?0:240;window.setTimeout(()=>{if(dialog.open)dialog.close();dialog.classList.remove('closing');},delay);}
 function renderCourses(){
   const root=$('#curriculum');root.replaceChildren();
-  const coreCount=state.courses.filter(course=>categoryClass(categoryOf(course))==='core').length;
-  let section=null, currentGroup='';
+  const core=[];
+  const electiveGroups=new Map();
   for(const course of state.courses){
     const category=categoryClass(categoryOf(course));
-    if(!['core','topics','electives'].includes(category))continue;
-    const group=category==='core'?'core':'electives';
-    if(group!==currentGroup){
-      section=document.createElement('section');
-      section.className=`${group}-section`;
-      section.innerHTML=group==='core'
-        ?`<div class="section-heading core-heading"><h2>${coreCount===1?'Core Course':'Core Courses'}</h2></div><div class="course-grid"></div>`
-        :'<div class="section-heading electives-heading"><h2>Electives</h2></div><div class="course-grid"></div><div class="legend"><span><i class="legend-swatch topics-swatch"></i>Space-focused Special Topics</span><span><i class="legend-swatch electives-swatch"></i>Other Electives</span></div>';
-      root.append(section);currentGroup=group;
+    if(category==='core')core.push(course);
+    else if(category==='topics'||category==='electives'){
+      const frequency=frequencyOf(course);
+      if(!electiveGroups.has(frequency))electiveGroups.set(frequency,[]);
+      electiveGroups.get(frequency).push(course);
     }
-    section.querySelector('.course-grid').append(renderCourse(course));
+  }
+  if(core.length){
+    const section=document.createElement('section');section.className='core-section';
+    section.innerHTML=`<div class="section-heading core-heading"><h2>${core.length===1?'Core Course':'Core Courses'}</h2></div><div class="course-grid"></div>`;
+    core.forEach(course=>section.querySelector('.course-grid').append(renderCourse(course)));
+    root.append(section);
+  }
+  let lastElectiveSection=null;
+  for(const [frequency,courses] of electiveGroups){
+    const section=document.createElement('section');section.className='electives-section';
+    const title=frequency?`${frequency} Electives`:'Electives with Unspecified Frequency';
+    section.innerHTML=`<div class="section-heading electives-heading"><h2>${esc(title)}</h2></div><div class="course-grid"></div>`;
+    courses.forEach(course=>section.querySelector('.course-grid').append(renderCourse(course)));
+    root.append(section);lastElectiveSection=section;
+  }
+  if(lastElectiveSection){
+    const legend=document.createElement('div');legend.className='legend';
+    legend.innerHTML='<span><i class="legend-swatch topics-swatch"></i>Space-focused Special Topics</span><span><i class="legend-swatch electives-swatch"></i>Other Electives</span>';
+    lastElectiveSection.append(legend);
   }
   if(!root.children.length)root.innerHTML='<div class="empty-state">No course records were returned by the Courses tab.</div>';
 }
